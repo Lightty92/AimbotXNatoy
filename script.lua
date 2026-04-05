@@ -31,24 +31,41 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     end
 end)
 
--- Function to get target part
-local function getTargetPart(character)
-    local head = character:FindFirstChild("Head")
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    local torso = character:FindFirstChild("Torso")
-
-    if head then
-        return head.Position
-    elseif torso then
-        return torso.Position
-    elseif humanoidRootPart then
-        return humanoidRootPart.Position
+-- Wall Check
+local function hasLineOfSight(targetPosition)
+    local origin = Camera.CFrame.Position
+    local ray = Ray.new(origin, (targetPosition - origin).Unit * 1000)
+    local hit, pos = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character}, false, true)
+    
+    if hit then
+        local distToHit = (pos - origin).Magnitude
+        local distToTarget = (targetPosition - origin).Magnitude
+        return distToHit >= distToTarget
     end
+    
+    return true
+end
+
+-- Get whatever part player is aiming at
+local function getAimedPart()
+    local target = Mouse.Target
+    
+    if target then
+        for i = 1, 10 do
+            if target and target:FindFirstChildOfClass("Humanoid") then
+                return target
+            end
+            if target then
+                target = target.Parent
+            end
+        end
+    end
+    
     return nil
 end
 
--- Find closest player
-local function getClosestPlayer()
+-- Find closest player with aimed part
+local function getClosestTarget()
     local closestTarget = nil
     local shortestDistance = math.huge
 
@@ -57,8 +74,15 @@ local function getClosestPlayer()
             local character = player.Character
             local humanoid = character:FindFirstChild("Humanoid")
             if humanoid and humanoid.Health > 0 then
-                local targetPos = getTargetPart(character)
-                if targetPos then
+                local aimedPart = getAimedPart()
+                if aimedPart and aimedPart:IsDescendantOf(character) then
+                    local targetPos = aimedPart.Position
+                    
+                    -- Wall check
+                    if not hasLineOfSight(targetPos) then
+                        continue
+                    end
+                    
                     local distance = (LocalPlayer.Character.HumanoidRootPart.Position - targetPos).Magnitude
 
                     local screenPoint, onScreen = Camera:WorldToScreenPoint(targetPos)
@@ -76,14 +100,15 @@ local function getClosestPlayer()
             end
         end
     end
+    
     return closestTarget
 end
 
 -- Soft Aimbot
 local function aimAtTarget()
-    local target = getClosestPlayer()
-    if target then
-        local TargetCF = CFrame.new(Camera.CFrame.Position, target)
+    local targetPos = getClosestTarget()
+    if targetPos then
+        local TargetCF = CFrame.new(Camera.CFrame.Position, targetPos)
         Camera.CFrame = Camera.CFrame:Lerp(TargetCF, Smoothness)
     end
 end
@@ -98,3 +123,4 @@ end)
 print("Soft Aimbot Loaded!")
 print("Press T to toggle")
 print("Hold RIGHT CLICK to aim")
+print("- Wall check added")
