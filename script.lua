@@ -1,84 +1,97 @@
-run_on_thread(getactorthreads()[1], [=[
-local function GetService(Name)
-    return cloneref(game.GetService(game, Name));
-end
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local Camera = workspace.CurrentCamera
 
-local PlayerService = GetService("Players");
-local Workspace = GetService("Workspace");
+local RightClickHeld = false
+local Smoothness = 0.08
 
-local LocalPlayer = PlayerService.LocalPlayer;
-local Camera = Workspace.CurrentCamera;
+-- Right Click Detection
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        RightClickHeld = true
+    end
+end)
 
-local Modules = { }; do
-    local Required = { };
-    local RequestedModules = {
-        ["firstPerson"] = {["1"] = "cam", ["2"] = "signals", ["3"] = "nodes", ["4"] = "chars", ["5"] = "collisionCheck", ["6"] = "firstPersonCam", ["7"] = "localChar", ["8"] = "breath", ["9"] = "charConfig", ["10"] = "equipment", ["11"] = "players", ["12"] = "mouse", ["13"] = "networkEvents", ["14"] = "gamepad", ["15"] = "mathLib"},
-        ["bullet"] = {["2"] = "charData"},
-    };
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        RightClickHeld = false
+    end
+end)
 
-    function Modules:Require(Name)
-        local NilInstances = getnilinstances();
-        for Index = 1, #NilInstances do
-            local Module = NilInstances[Index];
-            if (Module.Name == Name) then
-                return require(Module);
+-- Get target part
+local function getTargetPart()
+    local target = Mouse.Target
+    
+    if target then
+        for i = 1, 10 do
+            if target and target:FindFirstChildOfClass("Humanoid") then
+                local head = target:FindFirstChild("Head")
+                local torso = target:FindFirstChild("Torso") or target:FindFirstChild("HumanoidRootPart")
+                
+                if target == head then
+                    return head
+                elseif target.Name == "Torso" or target.Name == "HumanoidRootPart" then
+                    return torso
+                end
+            end
+            if target then
+                target = target.Parent
             end
         end
     end
+    
+    return nil
+end
 
-    function Modules:Get(Module)
-        local RequiredModule = Required[Module];
-        if (not RequiredModule) then
-            RequiredModule = self:Require(Module);
-        end
-        return RequiredModule;
-    end
+-- Find closest enemy
+local function getClosestEnemy()
+    local closestTarget = nil
+    local shortestDistance = math.huge
 
-    function Modules:Initiate()
-        for Module, Data in RequestedModules do
-            local Initiator = self:Require(Module);
-            if (not Initiator) then continue; end
-            Initiator = Initiator.setup;
-            for Index, Name in Data do
-                Required[Name] = debug.getupvalue(Initiator, Index);
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Team ~= LocalPlayer.Team then
+            local character = player.Character
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                local part = getTargetPart()
+                if part and part:IsDescendantOf(character) then
+                    local targetPos = part.Position
+                    local distance = (LocalPlayer.Character.HumanoidRootPart.Position - targetPos).Magnitude
+                    
+                    local screenPoint, onScreen = Camera:WorldToScreenPoint(targetPos)
+                    if onScreen then
+                        if distance < shortestDistance then
+                            shortestDistance = distance
+                            closestTarget = targetPos
+                        end
+                    end
+                end
             end
         end
     end
     
-    Modules:Initiate();
+    return closestTarget
 end
 
-local Signals = Modules:Get("signals");
-local cam = Modules:Get("cam");
-
--- No Recoil (Always ON)
-if cam then
-    local oldUpdate = cam.update
-    cam.update = function(...)
-        local args = {...}
-        if args[2] then
-            args[2].spread = 0
-            args[2].recoil = 0
+-- Soft Aim Assist (Always ON)
+RunService.RenderStepped:Connect(function()
+    if RightClickHeld then
+        local targetPos = getClosestEnemy()
+        if targetPos then
+            local TargetCF = CFrame.new(Camera.CFrame.Position, targetPos)
+            Camera.CFrame = Camera.CFrame:Lerp(TargetCF, Smoothness)
         end
-        return oldUpdate(table.unpack(args))
     end
-end
-
--- Straight Bullets (Always ON)
-InvokeEvent = hookfunction(Signals.invoke, function(...)
-    local Arguments = { ... };
-    
-    if Arguments[2] and Arguments[3] then
-        Arguments[3] = Camera.CFrame.LookVector
-    end
-    
-    return InvokeEvent(table.unpack(Arguments));
 end)
 
 print("=================================")
-print("Loaded - Always ON!")
-print("- No Recoil")
-print("- No Spread")
-print("- Straight Bullets")
+print("Soft Aim Assist Loaded!")
+print("Hold RIGHT CLICK when scoped")
+print("- Smooth follow (0.08)")
+print("- Targets Torso/Head")
+print("- No teammates")
+print("- ALWAYS ON")
 print("=================================")
-]=])
